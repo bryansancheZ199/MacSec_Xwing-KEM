@@ -19,11 +19,11 @@ Quick start (PoC)
 
 1. Place a compiled xwing_cli binary in the same folder as the scripts (or in your PATH). The CLI must implement the following minimal interface:
 
--- xwing_cli genkey --priv <privfile> --pub <pubfile> — produce private/public key files (raw bytes or hex).
+- xwing_cli genkey --priv <privfile> --pub <pubfile> — produce private/public key files (raw bytes or hex).
 
--- xwing_cli encaps --peer <peer_pubfile> --out <cipherfile> — produce ciphertext file (and optionally print shared secret in hex to stdout or to a file).
+- xwing_cli encaps --peer <peer_pubfile> --out <cipherfile> — produce ciphertext file (and optionally print shared secret in hex to stdout or to a file).
 
--- xwing_cli decaps --cipher <cipherfile> --priv <privfile> — print the shared secret in hex to stdout.
+- xwing_cli decaps --cipher <cipherfile> --priv <privfile> — print the shared secret in hex to stdout.
 
 2. Run the script on both peers. Decide which device is initiator (it will encapsulate using the responder's public key). Example invocation:
 
