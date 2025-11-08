@@ -1,0 +1,9 @@
+[package]
+name = "xwing_cli"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+x-wing = "0.1"      # uses the x-wing Rust crate (adjust version if needed)
+hex = "0.4"
+clap = { version = "4", features = ["derive"] }
