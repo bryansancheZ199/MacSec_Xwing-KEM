@@ -1,10 +1,16 @@
+use anyhow::{Result, anyhow};
 use clap::{Parser, Subcommand};
-use std::fs::File;
-use std::io::Write;
-use x_wing::{Encapsulate, Decapsulate, GenerateKeypair};
-use hex::encode;
+use hex;
+use std::convert::TryInto;
+use std::path::PathBuf;
+use x_wing::{
+    Encapsulate, Decapsulate, generate_key_pair_from_os_rng,
+    EncapsulationKey, DecapsulationKey, Ciphertext,
+    ENCAPSULATION_KEY_SIZE, DECAPSULATION_KEY_SIZE, CIPHERTEXT_SIZE,
+};
 
 #[derive(Parser)]
+#[command(author, version, about)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -12,34 +18,78 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    GenKey { priv_out: String, pub_out: String },
-    Encaps { peer_pub: String, out: String },
-    Decaps { cipher: String, priv_key: String },
+    /// Generate a new key pair
+    GenKey {
+        /// Output encapsulation (public) key
+        #[arg(long)]
+        pub_out: PathBuf,
+        /// Output decapsulation (private) key
+        #[arg(long)]
+        priv_out: PathBuf,
+    },
+
+    /// Encapsulate a shared secret for a peer public key
+    Encapsulate {
+        /// Peer public key file
+        #[arg(long)]
+        peer: PathBuf,
+        /// Output ciphertext file
+        #[arg(long)]
+        out: PathBuf,
+    },
+
+    /// Decapsulate a shared secret using a private key and ciphertext
+    Decapsulate {
+        /// Private key file
+        #[arg(long, name = "priv")]
+        priv_key: PathBuf,
+        /// Ciphertext file
+        #[arg(long)]
+        cipher: PathBuf,
+    },
 }
 
-fn main() -> anyhow::Result<()> {
+fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::GenKey { priv_out, pub_out } => {
-            let (pk, sk) = x_wing::GenerateKeypair::generate()?;
-            std::fs::write(&priv_out, sk)?;
-            std::fs::write(&pub_out, pk)?;
-            println!("OK");
+        Commands::GenKey { pub_out, priv_out } => {
+            let (ek, dk) = generate_key_pair_from_os_rng();
+
+            std::fs::write(pub_out, ek.as_bytes())?;
+            std::fs::write(priv_out, dk.to_bytes())?;
+
+            println!("✅ Keypair generated.");
         }
-        Commands::Encaps { peer_pub, out } => {
-            let pk = std::fs::read(peer_pub)?;
-            let (ct, ss) = x_wing::Encapsulate::encapsulate(&pk)?;
-            std::fs::write(&out, ct)?;
-            // for debugging: print shared secret as hex
-            println!("{}", encode(ss));
+
+        Commands::Encapsulate { peer, out } => {
+            let pk_bytes = std::fs::read(peer)?;
+            let pk_array: [u8; ENCAPSULATION_KEY_SIZE] = pk_bytes.try_into().map_err(|_| anyhow!("Invalid key length"))?;
+            let peer_pk = EncapsulationKey::from(&pk_array);
+
+            // Encapsulate using the peer's public key
+            // We need to use the correct RNG - let's use the x-wing crate's internal RNG
+            use rand_core::OsRng as XWingOsRng;
+            let (ct, ss) = peer_pk.encapsulate(&mut XWingOsRng)?;
+            std::fs::write(out, ct.to_bytes())?;
+            // Output shared secret in hex to stdout (as expected by Python scripts)
+            println!("{}", hex::encode(ss));
         }
-        Commands::Decaps { cipher, priv_key } => {
-            let ct = std::fs::read(cipher)?;
-            let sk = std::fs::read(priv_key)?;
-            let ss = x_wing::Decapsulate::decapsulate(&ct, &sk)?;
-            println!("{}", encode(ss)); // prints shared secret hex to stdout
+
+        Commands::Decapsulate { priv_key, cipher } => {
+            let sk_bytes = std::fs::read(priv_key)?;
+            let sk_array: [u8; DECAPSULATION_KEY_SIZE] = sk_bytes.try_into().map_err(|_| anyhow!("Invalid key length"))?;
+            let dk = DecapsulationKey::from(sk_array);
+
+            let ct_bytes = std::fs::read(cipher)?;
+            let ct_array: [u8; CIPHERTEXT_SIZE] = ct_bytes.try_into().map_err(|_| anyhow!("Invalid ct length"))?;
+            let ct = Ciphertext::from(&ct_array);
+
+            let ss = dk.decapsulate(&ct)?;
+            // Output shared secret in hex to stdout (as expected by Python scripts)
+            println!("{}", hex::encode(ss));
         }
     }
+
     Ok(())
 }

@@ -4,6 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-x-wing = "0.1"      # uses the x-wing Rust crate (adjust version if needed)
-hex = "0.4"
+x-wing = { version = "0.1.0-pre.2", features = ["os_rng"] }
+anyhow = "1"
 clap = { version = "4", features = ["derive"] }
+hex = "0.4"
+rand = { version = "0.8", features = ["getrandom"] }
+rand_core = "0.9"
