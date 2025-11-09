@@ -1,0 +1,36 @@
+rsync -avz --progress \
+    xwing_cli/target/aarch64-unknown-linux-gnu/release/xwing_cli \
+    kex_daemon.py \
+    kex_helper.py \
+    macsec_config.sh \
+    root@192.168.10.1:/tmp/macsec-xwing/
+    
+    
+    rsync -avz --progress \
+    xwing_cli/target/aarch64-unknown-linux-gnu/release/xwing_cli \
+    kex_daemon.py \
+    kex_helper.py \
+    macsec_config.sh \
+    root@192.168.10.2:/tmp/macsec-xwing/
+
+
+
+# To Raspberry Pi 1 (192.168.10.1)
+rsync -avz --progress \
+    xwing_cli/target/aarch64-unknown-linux-gnu/release/xwing_cli \
+    root@192.168.10.1:/tmp/macsec-xwing/
+
+# To Raspberry Pi 2 (192.168.10.2)
+rsync -avz --progress \
+    xwing_cli/target/aarch64-unknown-linux-gnu/release/xwing_cli \
+    root@192.168.10.2:/tmp/macsec-xwing/
+
+
+chmod +x /tmp/macsec-xwing/xwing_cli
+
+responder:   #works good
+python3 kex_daemon.py --role responder --if eth0 --listen 0.0.0.0 --port 5555 
+
+
+iniciator:   #some failures
+python3 kex_daemon.py --role initiator --if eth0 --peer 192.168.10.1 --port 5555
