@@ -44,9 +44,20 @@ def xwing_genkey(priv_path: str = "xwing_priv.bin", pub_path: str = "xwing_pub.b
 
 def xwing_encaps(peer_pub_path: str, out_cipher: str = "enc.bin") -> bytes:
     cmd = [str(XWING_CLI), "encapsulate", "--peer", peer_pub_path, "--out", out_cipher]
-    # CLI outputs shared secret hex to stdout, but we don't need it for initiator
-    subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    return open(out_cipher, "rb").read()
+    # CLI outputs shared secret hex to stdout
+    result = subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    cipher_data = open(out_cipher, "rb").read()
+    return cipher_data
+
+def xwing_encaps_with_ss(peer_pub_path: str, out_cipher: str = "enc.bin") -> Tuple[bytes, bytes]:
+    """Encapsulate and return both ciphertext and shared secret"""
+    cmd = [str(XWING_CLI), "encapsulate", "--peer", peer_pub_path, "--out", out_cipher]
+    result = subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    cipher_data = open(out_cipher, "rb").read()
+    # Extract shared secret from stdout (hex encoded)
+    hex_ss = result.stdout.strip().decode()
+    shared_secret = binascii.unhexlify(hex_ss)
+    return cipher_data, shared_secret
 
 def xwing_decaps(cipher_path: str, priv_path: str) -> bytes:
     cmd = [str(XWING_CLI), "decapsulate", "--cipher", cipher_path, "--priv-key", priv_path]
@@ -71,13 +82,47 @@ def create_macsec_iface(phys_if: str, macsec_if: str = "macsec0"):
         run_cmd(["ip", "link", "del", macsec_if])
     except Exception:
         pass
-    run_cmd(["ip", "link", "add", "link", phys_if, macsec_if, "type", "macsec", "port", "1", "encrypt", "on"])
+    try:
+        run_cmd(["ip", "link", "add", "link", phys_if, macsec_if, "type", "macsec", "port", "1", "encrypt", "on"])
+    except subprocess.CalledProcessError as e:
+        error_msg = str(e)
+        if "Not supported" in error_msg or "RTNETLINK" in error_msg or "can't find device" in error_msg:
+            print(f"ERROR: MACsec is not supported on this system")
+            print(f"")
+            print(f"To enable MACsec on OpenWrt, you need:")
+            print(f"  1. Install MACsec kernel module: opkg install kmod-macsec")
+            print(f"  2. Install full iproute2 (not BusyBox): opkg install ip-full")
+            print(f"  3. Or compile OpenWrt with MACsec support enabled in kernel config")
+            print(f"")
+            print(f"Note: BusyBox's 'ip' command doesn't support MACsec subcommands.")
+            print(f"You need the full iproute2 package.")
+            raise RuntimeError("MACsec not supported - install kmod-macsec and ip-full")
+        else:
+            raise
 
 def add_tx_sa(macsec_if: str, sa_id: int, key_hex: str, pn: int = 1):
     # key id '01' is used as an example; some setups use a CKN/CAK and MKA - here we inject SA directly
     keyid = "01"
-    run_cmd(["ip", "macsec", "add", macsec_if, "tx", "sa", str(sa_id), "pn", str(pn), "on", "key", keyid, key_hex])
+    try:
+        run_cmd(["ip", "macsec", "add", macsec_if, "tx", "sa", str(sa_id), "pn", str(pn), "on", "key", keyid, key_hex])
+    except subprocess.CalledProcessError as e:
+        error_msg = str(e)
+        if "Usage:" in error_msg or "BusyBox" in error_msg:
+            print(f"ERROR: BusyBox 'ip' command doesn't support MACsec")
+            print(f"Install full iproute2: opkg install ip-full")
+            raise RuntimeError("MACsec commands not available - install ip-full")
+        else:
+            raise
 
 def add_rx_sa(macsec_if: str, peer_mac: str, port: int, sa_id: int, key_hex: str, pn: int = 1):
     keyid = "01"
-    run_cmd(["ip", "macsec", "add", macsec_if, "rx", "soc", "eth0", "addr", peer_mac, str(port), "sa", str(sa_id), "pn", str(pn), "key", keyid, key_hex])
+    try:
+        run_cmd(["ip", "macsec", "add", macsec_if, "rx", "soc", "eth0", "addr", peer_mac, str(port), "sa", str(sa_id), "pn", str(pn), "key", keyid, key_hex])
+    except subprocess.CalledProcessError as e:
+        error_msg = str(e)
+        if "Usage:" in error_msg or "BusyBox" in error_msg:
+            print(f"ERROR: BusyBox 'ip' command doesn't support MACsec")
+            print(f"Install full iproute2: opkg install ip-full")
+            raise RuntimeError("MACsec commands not available - install ip-full")
+        else:
+            raise

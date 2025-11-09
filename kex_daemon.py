@@ -10,7 +10,7 @@ import os
 import time
 import binascii
 from kex_helper import (
-    xwing_genkey, xwing_encaps, xwing_decaps,
+    xwing_genkey, xwing_encaps, xwing_decaps, xwing_encaps_with_ss,
     hkdf_sha3_256, key_to_hex,
     create_macsec_iface, add_tx_sa, add_rx_sa
 )
@@ -46,6 +46,12 @@ def exchange_pub_and_kem(role: str, peer_ip: str, port: int):
             conn, addr = s.accept()
             with conn:
                 print("Connected by", addr)
+                # receive initiator's pubkey first
+                ilen = int.from_bytes(conn.recv(4), "big")
+                ipub = b""
+                while len(ipub) < ilen:
+                    ipub += conn.recv(BUFFER_SIZE)
+                print(f"Initiator pubkey received ({len(ipub)} bytes)")
                 # send our pubkey
                 with open(pub, "rb") as f:
                     mypub = f.read()
@@ -61,7 +67,7 @@ def exchange_pub_and_kem(role: str, peer_ip: str, port: int):
                 # save cipher
                 with open(CIPHER_F, "wb") as cf:
                     cf.write(cipher)
-                print("Ciphertext received, decapsulating...")
+                print(f"Ciphertext received ({len(cipher)} bytes), decapsulating...")
                 shared = xwing_decaps(CIPHER_F, priv)
                 print("Decapsulation complete; derived shared secret (hidden)")
                 # send acknowledgement
@@ -77,6 +83,7 @@ def exchange_pub_and_kem(role: str, peer_ip: str, port: int):
             with open(pub, "rb") as f:
                 mypub = f.read()
             s.sendall(len(mypub).to_bytes(4, "big") + mypub)
+            print(f"Initiator pubkey sent ({len(mypub)} bytes)")
             # receive responder pubkey
             rlen = int.from_bytes(s.recv(4), "big")
             rpub = b""
@@ -86,16 +93,15 @@ def exchange_pub_and_kem(role: str, peer_ip: str, port: int):
             with open("peer_pub.bin", "wb") as pf:
                 pf.write(rpub)
             print("Responder pubkey received; encapsulating...")
-            cipher = xwing_encaps("peer_pub.bin", CIPHER_F)
+            cipher, shared = xwing_encaps_with_ss("peer_pub.bin", CIPHER_F)
+            print(f"Ciphertext generated ({len(cipher)} bytes), sending...")
             # send ciphertext
             s.sendall(len(cipher).to_bytes(4, "big") + cipher)
             # wait for OK
             ack = s.recv(4)
             if ack.startswith(b"OK"):
-                print("Responder acknowledged; initiator has no shared secret printed (peer decaps)")
-            # For mutual shared secret, you can have both sides do encaps/decaps or run two-way exchange. For this PoC we use responder decapsulation.
-            # If you prefer initiator to also get shared, adjust protocol to return shared secret.
-            return None
+                print("Responder acknowledged; shared secret derived")
+            return shared
 
     else:
         raise ValueError("Unknown role")

@@ -1,3 +1,12 @@
+//install on the pi's:
+opkg install kmod-macsec
+opkg install kmod-macsec ip-full
+opkg install python3 python3-pip
+
+
+
+
+// copy the files
 rsync -avz --progress \
     xwing_cli/target/aarch64-unknown-linux-gnu/release/xwing_cli \
     kex_daemon.py \
@@ -13,8 +22,6 @@ rsync -avz --progress \
     macsec_config.sh \
     root@192.168.10.2:/tmp/macsec-xwing/
 
-
-
 # To Raspberry Pi 1 (192.168.10.1)
 rsync -avz --progress \
     xwing_cli/target/aarch64-unknown-linux-gnu/release/xwing_cli \
@@ -25,12 +32,13 @@ rsync -avz --progress \
     xwing_cli/target/aarch64-unknown-linux-gnu/release/xwing_cli \
     root@192.168.10.2:/tmp/macsec-xwing/
 
-
+//give permissions
 chmod +x /tmp/macsec-xwing/xwing_cli
 
-responder:   #works good
+
+//Runs the responder:   
 python3 kex_daemon.py --role responder --if eth0 --listen 0.0.0.0 --port 5555 
 
 
-iniciator:   #some failures
+//Runs the iniciator: 
 python3 kex_daemon.py --role initiator --if eth0 --peer 192.168.10.1 --port 5555
