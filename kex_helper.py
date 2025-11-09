@@ -4,8 +4,13 @@
 import subprocess
 import binascii
 import os
+from pathlib import Path
 from hashlib import sha3_256
 from typing import Tuple
+
+# Find xwing_cli in the same directory as this script
+SCRIPT_DIR = Path(__file__).parent.absolute()
+XWING_CLI = SCRIPT_DIR / "xwing_cli"
 
 # Simple HKDF (extract->expand) using SHA3-256
 def hkdf_sha3_256_extract(salt: bytes, ikm: bytes) -> bytes:
@@ -31,21 +36,20 @@ def hkdf_sha3_256(ikm: bytes, info: bytes = b"", salt: bytes = b"", length: int 
     prk = hkdf_sha3_256_extract(salt, ikm)
     return hkdf_sha3_256_expand(prk, info, length)
 
-# xwing_cli wrappers - assumes xwing_cli is in PATH or same dir; adjusts to whatever CLI you provide
+# xwing_cli wrappers - finds xwing_cli in the same directory as this script
 def xwing_genkey(priv_path: str = "xwing_priv.bin", pub_path: str = "xwing_pub.bin") -> Tuple[str,str]:
-    cmd = ["./xwing_cli", "genkey", "--priv", priv_path, "--pub", pub_path]
+    cmd = [str(XWING_CLI), "gen-key", "--priv-out", priv_path, "--pub-out", pub_path]
     subprocess.run(cmd, check=True)
     return priv_path, pub_path
 
 def xwing_encaps(peer_pub_path: str, out_cipher: str = "enc.bin") -> bytes:
-    cmd = ["./xwing_cli", "encaps", "--peer", peer_pub_path, "--out", out_cipher]
-    subprocess.run(cmd, check=True)
-    # some CLIs write ciphertext to file and print shared secret hex to stdout; try to also read stdout
-    # For this PoC we assume shared secret is not printed; initiator will send the ciphertext to the peer and peer will decaps
+    cmd = [str(XWING_CLI), "encapsulate", "--peer", peer_pub_path, "--out", out_cipher]
+    # CLI outputs shared secret hex to stdout, but we don't need it for initiator
+    subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     return open(out_cipher, "rb").read()
 
 def xwing_decaps(cipher_path: str, priv_path: str) -> bytes:
-    cmd = ["./xwing_cli", "decaps", "--cipher", cipher_path, "--priv", priv_path]
+    cmd = [str(XWING_CLI), "decapsulate", "--cipher", cipher_path, "--priv-key", priv_path]
     out = subprocess.run(cmd, check=True, stdout=subprocess.PIPE)
     # expect stdout to contain hex of shared secret
     hexshared = out.stdout.strip().decode()

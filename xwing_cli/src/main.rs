@@ -54,10 +54,10 @@ fn main() -> Result<()> {
 
     match cli.command {
         Commands::GenKey { pub_out, priv_out } => {
-            let (ek, dk) = generate_key_pair_from_os_rng();
+            let (dk, ek) = generate_key_pair_from_os_rng();
 
-            std::fs::write(pub_out, ek.as_bytes())?;
-            std::fs::write(priv_out, dk.to_bytes())?;
+            std::fs::write(pub_out, ek.to_bytes())?;
+            std::fs::write(priv_out, dk.as_bytes())?;
 
             println!("✅ Keypair generated.");
         }

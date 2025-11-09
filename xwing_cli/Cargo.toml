@@ -3,6 +3,9 @@ name = "xwing_cli"
 version = "0.1.0"
 edition = "2021"
 
+[profile.release]
+strip = true
+
 [dependencies]
 x-wing = { version = "0.1.0-pre.2", features = ["os_rng"] }
 anyhow = "1"
